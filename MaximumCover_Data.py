@@ -206,6 +206,7 @@ class Data_MaximumCover():
                 if Solution[t][j] > 0:
                     cols.append( (j, Solution[t][j]) )
             subCovering = self.Covering[t][cols]
+            subCovering['Home'] = self.Covering[t]['Home']
             TotalEVs += subCovering.any(axis=1).dot(self.Populations[t])
         return TotalEVs
 
