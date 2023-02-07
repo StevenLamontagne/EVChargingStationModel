@@ -23,6 +23,7 @@ class Data_SingleLevel():
             self.T=4
 
             #Percentage of population that is considering purchasing a vehicle in each year
+            #self.n_v=0.053
             self.n_v=0.1
             
             #Number of charging stations
@@ -50,19 +51,18 @@ class Data_SingleLevel():
             
             #Initial number of charging outlets at each station
             self.x0=[j["StartingOutlets"] for j in self.stations]
-            #Binary indicating whether each station was originally open or not
+            #Binary indicating whether each station was originally open or no1t
             self.y0=[1 if j>0 else 0 for j in self.x0]
 
             #Number of simulations per option for the user class
-            #R_i = R*(|C_i^0|+ |C_i^1|)
-            self.R = 15
+            self.R=15
 
             #Budget for each year
             self.B=[550,300,250,500]
 
             #Maximum number of outlets at each station
             self.Mj=[j["MaxOutlets"]+1 for j in self.stations]
-
+            #self.Mj=[2+1 for j in self.stations]
 
             #Cost for opening each charging station
             self.f=100
@@ -96,8 +96,8 @@ class Data_SingleLevel():
             self.DataCreationTime=end-start
         else:
             self.load(load)
-            
-    #Calculate the utility coefficients beta  
+
+    #Calculate appropriate beta coefficients for each station and outlet configuration       
     def CalculateCoefficients(self):
         self.beta = [ [ [ [np.nan for k in range(self.Mj[j])] for i in range(self.N)] for j in range(self.M)] for t in range(self.T)]
         for t in range(self.T):
@@ -107,8 +107,7 @@ class Data_SingleLevel():
                         #Current calculation for utility uses a diminishing utility formulation in terms of the number of charging outlets
                         self.beta[t][j][i][k]= self.userClasses[i]["StationCoefficients"][str(j)][k]
 
-    #Draw the error terms epsilon
-    #These are combined with the alternative specific constants  to create the d0 and d1 variables
+    #Generate the error terms for exogenous and endogenous alternatives
     def CalculateErrorTerms(self):
         self.d0 = [ [ [ [np.nan for r in range(self.R[i])] for i in range(self.N)] for j in range(2)] for t in range(self.T)]
         self.d1 = [ [ [ [np.nan for r in range(self.R[i])] for i in range(self.N)] for j in range(self.M)] for t in range(self.T)]
@@ -143,8 +142,7 @@ class Data_SingleLevel():
             print(e)
             raise Exception
                 
-    #Calculate the upper and lower bounds for the utility
-    #(using the error terms)
+    #Calculate the bounds for each u_ji^rt based on the error terms
     def CalculateBounds(self):
         #Calculate bounds for constraints
         self.aBar = [ [np.nan for i in range(self.N)] for t in range(self.T)]
@@ -172,8 +170,25 @@ class Data_SingleLevel():
                         self.mu0[t][j][i][r] = alpha-self.d0[t][j][i][r]
                     self.mu[t][i][r] = alpha-self.aBar[t][i]
 
-    #Clear all error terms and derived bounds
-    # For generating new instance without recreating all parameter  
+
+    #Converting from dict-style to list-style solution representations
+    def ConvertToArray(self, Solution):
+            new = np.zeros((self.T, self.M))
+            if (0,0) in Solution:
+                for t in range(self.T):
+                        for j in range(self.M):
+                                new[t][j] = Solution[(t,j)]
+            elif (0,0,0) in Solution:
+                for t in range(self.T):
+                        for j in range(self.M):
+                                new[t][j] = sum([k*Solution[(t,j,k)] for k in range(self.Mj[j])])              
+            return new
+
+    #Generates a single error term (deprecated)
+    def GenerateError(self):
+        return float(np.random.gumbel(self.gumbelLocation,self.gumbelScale,1))
+
+    #Used for deleting error terms when running multiple tests that differ only in error terms     
     def ClearErrorTerms(self):
         print("Clearing error terms")
         del self.d0
@@ -184,8 +199,7 @@ class Data_SingleLevel():
         del self.b1
         del self.U
 
-    #Dump parameter values to json file
-    #Since instance sizes are small, we include bounds in the json file as well
+    #Stores the data in a json format. Includes additional metadata unnecessary for solving, but used for data creation
     def dump(self,f):
         info = {
             'userFilepath':self.userFilepath,
@@ -221,63 +235,37 @@ class Data_SingleLevel():
 
         if self.Preprocess_w1 is not None:
             info['Preprocess_stats']=self.Preprocess_stats
+
+
         json.dump(info, open(f, "w+"), indent=3)
     
-    #Read parameter values from json file
+    #Load data stored in json format
     def load(self, f):
         data = json.load(open(f,"r"))
         self.__dict__.update(data)
 
-    #Function to determine if any w1 variables can be fixed to 0, 
-    # based on if the highest possible utility (with maximum outlets)
-    # is still less than the opt-out
-    def Preprocess(self):
-        tic1=time()
-        self.Preprocess_w1=[]
-        self.Preprocess_stats={'Fixed w1':0, 'Option Removed':0, 'Time':0}
+    #Modify variables (in place) for use with the reformulated models            
+    def Process_Reformulation(self):
+        c = [[[0 for _ in range(self.Mj[j])] for j in range(self.M)] for _ in range(self.T)]
         for t in range(self.T):
-            Utilities = pd.DataFrame()
-            Utilities['OptOut'] = [self.d0.get((t,0,i,r), np.nan) for i in range(self.N) for r in range(self.R[i])]
-            Utilities['Home'] = [self.d0.get((t,1,i,r), np.nan) for i in range(self.N) for r in range(self.R[i])]
-            Utilities['Exo'] = Utilities.max(axis=1)
-
-            Utilities['UserClass'] = [i for i in range(self.N) for r in range(self.R[i])]
-            Utilities['Scenario'] = [r for i in range(self.N) for r in range(self.R[i])]
-
-            del Utilities['OptOut']
-            del Utilities['Home']
-
             for j in range(self.M):
-                Station = np.array([self.d1.get((t,j,i,r), np.nan) for i in range(self.N) for r in range(self.R[i])])
-                Station += np.array([self.beta.get((t,j, i, self.Mj[j]-1), np.nan) for i in range(self.N) for r in range(self.R[i])])
-                Utilities['Station'] = Station
+                c[t][j][1] = self.c[t][j] + self.f[t][j]
+                for k in range(2, self.Mj[j]):
+                   c[t][j][k] = self.c[t][j] 
+        self.c = c
+        
+        x0 = [[0 for _ in range(self.Mj[j])] for j in range(self.M)]
+        for j in range(self.M):
+            for k in range(self.Mj[j]):
+                if self.x0[j] >= k:
+                    x0[j][k] = 1
+                else:
+                    x0[j][k] = 0
+        self.x0 = x0
 
-                toRemove = Utilities[Utilities['Exo'] > Utilities['Station']]
-
+        for t in range(self.T):
+            for j in range(self.M):
                 for i in range(self.N):
-                    subUtilities=toRemove[toRemove['UserClass'] == i]
-                    if j in self.C1i[t][i] and len(subUtilities) == self.R[i]:
-                        self.C1i[t][i].remove(j)
-                        self.Preprocess_stats['Option Removed'] += 1
-                    elif j in self.C1i[t][i]:
-                        self.Preprocess_w1 += [(t,j,i,r) for r in subUtilities['Scenario']]
-                        self.Preprocess_stats['Fixed w1'] += len(subUtilities)
-        toc1=time()
-        self.Preprocess_stats['Time']=toc1-tic1
-        print("Preprocessing time (seconds): ", self.Preprocess_stats['Time'])
-                        
-     
-                
-def Test():
-    userFilename="Data/TroisRivieres/Default/UserClasses_Rand28_Stations10.json"
-    stationFilename="Data/TroisRivieres/Default/Stations_Rand10.json"
-    Data = Data_SingleLevel(userFilename, stationFilename)
-    return Data
+                    for k in range(2,self.Mj[j]):
+                        self.beta[t][j][i][k] -= self.beta[t][j][i][k-1]
 
-def Test_Adv():
-    userFilename = "Data/TroisRivieres/Heuristic/UserClassesNested_Rand28_Stations30.json"
-    stationFilename = "Data/TroisRivieres/Heuristic/Stations_Rand30.json"
-    Data = Data_SingleLevel(userFilename,
-                          stationFilename,
-                          {'B':[900, 900, 900, 900, 900, 900, 900, 900, 900, 900], 'T':10, 'Mj':[6 for _ in range(30)], 'R':5})
-    return Data
