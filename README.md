@@ -8,6 +8,7 @@ The instances used in that paper can be found here: https://datashare.ed.ac.uk/h
 - `MC{instance}.pickle` file (one per instance), designed to be loaded with `Data_MaximumCover` (using the `load` argument during initialisation). This file also contains the raw error terms, which can be accessed after unpickling the files. Once unpickled, these files are in JSON format, with the keys `d0` and `d1` corresponding to the error terms + alternative-specific constants for the exogenous and endogenous alternatives (respectively).
 - `Shared.json` (one per dataset), used while loading the compressed files. This file includes the parameter values which do not vary by instance.
 - `MC{instance}_compressed.json` file (one per instance), designed to be loaded with `Data_MaximumCover` (using the `load_compressed` argument during initialisation. Make sure to include the Shared file and instance file in the same path. See example below). These files have the coverage "baked in" for the maximum covering formulation, and so cannot be used with the single-level formulation. However, they load significantly faster for models based on the maximum covering formulation, which includes the heuristic methods.  
+For the Price and LongSpan datasets, only the last three are included.
 
 In order to run any of the solving methods, you must first instantiate the data using the appropriate data file and class. This can be done, as an example, by the following code (in Python shell):
 ```
