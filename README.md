@@ -1,7 +1,7 @@
 # EVChargingStationModel
  Optimisation model for determining optimal location of electric vehicle charging stations as to maximise electric vehicle adoption
 
-The paper associated with this work is now available on arXiv: https://arxiv.org/abs/2206.11165 .
+The paper associated with this work is accepted to INFORMS Journal of Computing, and is now available online: https://pubsonline.informs.org/doi/10.1287/ijoc.2022.0185.
 The instances used in that paper can be found here: https://datashare.ed.ac.uk/handle/10283/4856 . For the Simple, Distance, and HomeCharging datasets, this includes:
 - `SL{instance}.json` file (one per instance), designed to be loaded with `Data_SingleLevel` (using the `load` argument during initialisation).
 - `GF_{dataset}.json` file (one per dataset), designed to be loaded with `Data_GrowthFunction` (using the `load` argument during initialisation).
